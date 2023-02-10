@@ -1,0 +1,16 @@
+{
+  "Version": 1,
+  "ProjectMap": {
+    "f1e71efa-4821-45df-815e-8906a6d00b30": {
+      "ProjectGuid": "f1e71efa-4821-45df-815e-8906a6d00b30",
+      "DisplayName": "backend",
+      "ColorIndex": 0
+    },
+    "db817a92-d158-4794-99c4-d643b3db828d": {
+      "ProjectGuid": "db817a92-d158-4794-99c4-d643b3db828d",
+      "DisplayName": "docker",
+      "ColorIndex": 1
+    }
+  },
+  "NextColorIndex": 2
+}
