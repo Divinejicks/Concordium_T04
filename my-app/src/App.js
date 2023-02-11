@@ -35,7 +35,8 @@ function App() {
   const onVerifyID = async () => {
     const statementBuilder = new IdStatementBuilder()
     statementBuilder.addMembership(AttributesKeys.countryOfResidence, countries.split(',').map(s => s.trim()))
-    statementBuilder.addMinimumAge(20)
+    // statementBuilder.addMinimumAge(20)
+    statementBuilder.addRange(AttributesKeys.dob, '19630101', '20031231')
     const statement = statementBuilder.getStatement()
 
     const { data } = await httpClient.get(`verifiers/challenge/${walletAddress}`)
