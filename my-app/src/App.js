@@ -9,7 +9,7 @@ function App() {
   const [walletAddress, setWalletAddress] = useState("");
   const [walletConnected, setWalletConnected] = useState(false)
   const [concordiumClient, setConcordiumClient] = useState(null)
-  const [endTime, setEndTime] = useState(null)
+  const [endTime, setEndTime] = useState(new Date(Date.now))
   const [countries, setCountries] = useState("CM, IT, DK, GM")
   const [donationCreated, setDonationCreated] = useState(false)
   const [contractIndex, setContractIndex] = useState(2830)
@@ -41,9 +41,14 @@ function App() {
     const { data } = await httpClient.get(`verifiers/challenge/${walletAddress}`)
     setChallenge(data.challenge)
     concordiumClient.requestIdProof(walletAddress, statement, data.challenge)
-      .then((proof) => {
-        console.log("proof", proof)
-        onCreateDonation()
+      .then(async (proof) => {
+        var result = await httpClient.get(`verifiers/prove/${data.challenge}`)
+        const token = result.data
+        if (token !== "") {
+          localStorage.setItem("token_key_cc", token)
+          alert("Your prove was successfull, your token will last for 2 minutes, click OK to continue")
+          onCreateDonation()
+        }
       }).catch(async (error) => {
         await httpClient.delete(`verifiers/${data.challenge}`)
         alert("You are not allowed to donate")
@@ -206,6 +211,7 @@ function App() {
 
                   {donationCreated && (
                     <>
+                    
                          {/* donate: updating the blockchain */}
                   <div className="text-center mx-auto" style={{ maxWidth: "30rem"}}>
                     <h3 className="mt-5">Donation CCD to contract</h3>

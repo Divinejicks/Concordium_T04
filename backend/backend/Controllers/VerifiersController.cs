@@ -4,7 +4,10 @@ using ConcordiumNetSdk;
 using ConcordiumNetSdk.Responses.AccountInfoResponse;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 
 namespace backend.Controllers
@@ -21,11 +24,13 @@ namespace backend.Controllers
     {
         readonly ILogger _logger;
         readonly IDbService _db;
+        readonly IConfiguration _config;
 
-        public VerifiersController(ILogger<VerifiersController> logger, IDbService db)
+        public VerifiersController(ILogger<VerifiersController> logger, IDbService db, IConfiguration config)
         {
             _logger = logger;
             _db = db;
+            _config = config;
         }
 
         [HttpGet("challenge/{address}")]
@@ -41,11 +46,53 @@ namespace backend.Controllers
             var verifierCollection = _db.getCollection<Verifier>();
             var verifier = new Verifier();
             verifier.Challenge = challengeHexString;
+            verifier.walletAddress = address;
             await verifierCollection.InsertOneAsync(verifier);
 
             return await GetVerifier(verifier.id);
         }
 
+        [HttpGet("prove/{challenge}")]
+        public async Task<IActionResult> GetAuth(string challenge)
+        {
+            // check the proof with the challenge and generate a jwt
+            // delete the challenge generated above
+            var verifierCollection = _db.getCollection<Verifier>();
+            var verifier = await verifierCollection.Find(v => v.Challenge == challenge).FirstAsync();
+
+            if (verifier != null)
+            {
+                var userCollection = _db.getCollection<User>();
+                var user = new User();
+                user = await userCollection.Find(u => u.walletAddress == verifier.walletAddress).FirstOrDefaultAsync();
+                if (user == null)
+                {
+                    var _user = new User();
+                    _user.walletAddress = verifier.walletAddress;
+                    await userCollection.InsertOneAsync(_user);
+                    user = await userCollection.Find(u => u.walletAddress == verifier.walletAddress).FirstOrDefaultAsync();
+                }
+
+                var token = GenerateToken(user);
+
+                await Delete(challenge);
+                return Ok(token);
+            }
+            else
+            {
+                throw new Exception("Challenge is not valid");
+            }
+        }
+
+        [HttpDelete("{challenge}")]
+        public async Task Delete(string challenge)
+        {
+            var verifierCollection = _db.getCollection<Verifier>();
+            await verifierCollection.FindOneAndDeleteAsync(v => v.Challenge == challenge);
+        }
+
+
+        // Get verifier
         private async Task<Verifier> GetVerifier(string id)
         {
             var verifierCollection = _db.getCollection<Verifier>();
@@ -53,48 +100,25 @@ namespace backend.Controllers
             return verifier;
         }
 
-        [HttpGet("statement/{address}/{txHash}")]
-        public async Task<IActionResult> GetStatement(string address, string txHash)
+
+        // To generate token
+        private string GenerateToken(User user)
         {
-            //Connection connection = new Connection
-            //{
-            //    Address = "http://localhost:5146",
-            //    AuthenticationToken = "rpcadmin"
-            //};
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]));
+            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier,user.id),
+            };
+            var token = new JwtSecurityToken(_config["Jwt:Issuer"],
+                _config["Jwt:Audience"],
+                claims,
+                expires: DateTime.Now.AddMinutes(2),
+                signingCredentials: credentials);
 
-            //ConcordiumNodeClient concordiumNodeClient = new ConcordiumNodeClient(connection);
 
-            //AccountAddress accountAddress = AccountAddress.From("32gxbDZj3aCr5RYnKJFkigPazHinKcnAhkxpade17htB4fj6DN");
-            //BlockHash blockHash = BlockHash.From("44c52f0dc89c5244b494223c96f037b5e312572b4dc6658abe23832e3e5494af");
+            return new JwtSecurityTokenHandler().WriteToken(token);
 
-            //AccountInfo? accountInfo = await concordiumNodeClient.GetAccountInfoAsync(accountAddress, blockHash);
-
-            return Ok();
-        }
-
-        //[HttpGet("prove/{challenge}")]
-        //public async Task<IActionResult> GetAuth(string challenge)
-        //{
-        //    // check the proof with the challenge and generate a jwt
-        //    // delete the challenge generated above
-        //    var verifierCollection = _db.getCollection<Verifier>();
-        //    var verifier = await verifierCollection.Find(v => v.Challenge == challenge).FirstAsync();
-
-        //    if (verifier != null)
-        //    {
-
-        //    }
-        //    else
-        //    {
-        //        throw new Exception("Challenge is not valid");
-        //    }
-        //}
-
-        [HttpDelete("{challenge}")]
-        public async void Delete(string challenge)
-        {
-            var verifierCollection = _db.getCollection<Verifier>();
-            await verifierCollection.FindOneAndDeleteAsync(v => v.Challenge == challenge);
         }
 
     }
